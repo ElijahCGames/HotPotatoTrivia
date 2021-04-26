@@ -1,0 +1,69 @@
+<html>
+    <head>
+        <title>micro:bit</title>
+        <script type="text/javascript" src="node_modules/microbit-web-bluetooth/dist/microbit.umd.js"></script>
+        <script src="https://cdn.socket.io/socket.io-1.3.5.js"></script>
+
+    </head>
+    <body>
+        <button id="connect">Connect</button>
+
+        <div id="log" style="white-space: pre" />
+        <script>
+        	// Gets value from bluetooth and sends it over to the serial
+            const logEl = document.getElementById("log");
+            const log = (message) => logEl.innerHTML = `${message}\n${logEl.innerHTML}`;
+            const logJson = (message) => log(JSON.stringify(message, null, 2));
+            
+
+            document.getElementById("connect").onclick = async () => {
+
+                const port = await navigator.serial.requestPort();
+                await port.open({baudRate:9600}); 
+
+                const textEncoder = new TextEncoderStream();
+                const writableStreamClosed = textEncoder.readable.pipeTo(port.writable);
+
+                const writer = textEncoder.writable.getWriter();
+                
+                const reader = port.readable.getReader();  
+
+                const eventHandler = function(event) {
+                    console.log(event.detail);
+                    writer.write((event.detail.x));
+                }
+                const device = await microbit.requestMicrobit(window.navigator.bluetooth);
+                if (device) {
+                    const services = await microbit.getServices(device);
+
+                    if (services.deviceInformationService) {
+                        logJson(await services.deviceInformationService.readDeviceInformation());
+                    }
+
+
+                    if (services.ledService) {
+                        await services.ledService.writeMatrixState([
+                            [1, 0, 1, 0, 0],
+                            [1, 1, 1, 1, 1],
+                            [0, 0, 1, 0, 0],
+                            [0, 1, 0, 1, 0],
+                            [1, 0, 0, 0, 1]
+                        ]);
+                        logJson(await services.ledService.readMatrixState());
+
+                        await services.ledService.setScrollingDelay(50);
+                        log(await services.ledService.getScrollingDelay());
+
+                        await services.ledService.writeText("Web BLE");
+                    }
+
+                    if (services.accelerometerService) {
+                        await services.accelerometerService.setAccelerometerPeriod(100);
+                        log(await services.accelerometerService.getAccelerometerPeriod());
+                        services.accelerometerService.addEventListener("accelerometerdatachanged", eventHandler);
+                    }
+                }
+            }
+        </script>
+    </body>
+</html>
